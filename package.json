@@ -10,6 +10,10 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fhihung/homebridge-aristonnet.git"
+  },
   "keywords": [
     "homebridge",
     "ariston",
@@ -17,8 +21,12 @@
     "aristonnet",
     "homebridge-plugin"
   ],
-  "author": "dev.phihung",
+  "author": "fhihung",
   "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/fhihung/homebridge-aristonnet/issues"
+  },
+  "homepage": "https://github.com/fhihung/homebridge-aristonnet#readme",
   "dependencies": {
     "requestretry": "^7.1.0"
   }
