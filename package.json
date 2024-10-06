@@ -1,0 +1,25 @@
+{
+  "name": "homebridge-aristonnet",
+  "version": "1.0.0",
+  "description": "A plugin for control Ariston Water Heater",
+  "main": "index.js",
+  "engines": {
+    "node": ">=0.12.0",
+    "homebridge": ">=0.4.46"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "homebridge",
+    "ariston",
+    "aristonaqua",
+    "aristonnet",
+    "homebridge-plugin"
+  ],
+  "author": "dev.phihung",
+  "license": "ISC",
+  "dependencies": {
+    "requestretry": "^7.1.0"
+  }
+}
