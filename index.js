@@ -17,7 +17,7 @@ class AristonWaterHeater {
     this.serial_number = config["serial_number"] || "123456789";
 
     this.interval = 600; // Thời gian cập nhật (600 giây)
-    this.temperature = 0; // Khởi tạo nhiệt độ
+    this.temperature = 10; // Nhiệt độ khởi tạo tối thiểu là 10 (tránh lỗi vượt giới hạn)
     this.powerState = false; // Khởi tạo trạng thái bật/tắt
     this.token = null; // Token cho API
 
@@ -31,21 +31,39 @@ class AristonWaterHeater {
 
     // Khởi tạo dịch vụ nhiệt độ
     this.thermostatService = new hap.Service.Thermostat(this.model);
+
+    // Cấu hình chỉ cho phép chế độ "HEAT"
+    this.thermostatService
+      .getCharacteristic(hap.Characteristic.TargetHeatingCoolingState)
+      .setProps({
+        validValues: [hap.Characteristic.TargetHeatingCoolingState.HEAT] // Chỉ cho phép chế độ HEAT
+      })
+      .onGet(() => hap.Characteristic.TargetHeatingCoolingState.HEAT); // Mặc định là HEAT
+
+    this.thermostatService
+      .getCharacteristic(hap.Characteristic.CurrentHeatingCoolingState)
+      .onGet(() => hap.Characteristic.CurrentHeatingCoolingState.HEAT); // Mặc định trạng thái là HEAT
+
+    // Cập nhật nhiệt độ hiện tại
     this.thermostatService
       .getCharacteristic(hap.Characteristic.CurrentTemperature)
       .onGet(this.getCurrentTemperature.bind(this));
 
-    // Thêm chức năng bật/tắt
+    // Điều chỉnh nhiệt độ với giá trị hợp lệ (tối thiểu là 10)
+    this.thermostatService
+      .getCharacteristic(hap.Characteristic.TargetTemperature)
+      .setProps({
+        minValue: 10, // Đặt giá trị tối thiểu để tránh lỗi
+        maxValue: 100, // Giá trị tối đa có thể đặt
+      })
+      .onGet(this.getCurrentTemperature.bind(this))
+      .onSet(this.setTemperature.bind(this));
+
+    // Thêm chức năng bật/tắt thiết bị
     this.thermostatService
       .getCharacteristic(hap.Characteristic.On)
       .onGet(this.getPowerState.bind(this))
       .onSet(this.setPowerState.bind(this));
-
-    // Thêm chức năng điều chỉnh nhiệt độ
-    this.thermostatService
-      .getCharacteristic(hap.Characteristic.TargetTemperature)
-      .onGet(this.getCurrentTemperature.bind(this))
-      .onSet(this.setTemperature.bind(this));
 
     // Đăng nhập vào API
     this.loginToAPI();
@@ -176,7 +194,7 @@ class AristonWaterHeater {
       }
 
       // Cập nhật nhiệt độ
-      this.temperature = body.temp || 0; // Kiểm tra body.temp có tồn tại không
+      this.temperature = body.temp || 10; // Đảm bảo nhiệt độ không dưới mức tối thiểu
       this.log("Success updating temperature: " + this.temperature);
     });
   }
