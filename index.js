@@ -17,7 +17,7 @@ class AristonWaterHeater {
     this.serial_number = config["serial_number"] || "123456789";
 
     this.interval = 600; // Thời gian cập nhật (600 giây)
-    this.temperature = 10; // Nhiệt độ khởi tạo tối thiểu
+    this.temperature = 10; // Nhiệt độ khởi tạo tối thiểu là 10 (tránh lỗi vượt giới hạn)
     this.powerState = false; // Khởi tạo trạng thái bật/tắt
     this.token = null; // Token cho API
 
@@ -29,8 +29,35 @@ class AristonWaterHeater {
       .setCharacteristic(hap.Characteristic.Model, this.model)
       .setCharacteristic(hap.Characteristic.SerialNumber, this.serial_number);
 
-    // Khởi tạo dịch vụ bật/tắt và nhiệt độ
-    this.thermostatService = new hap.Service.Switch(this.model); // Sử dụng Switch cho chức năng bật/tắt
+    // Khởi tạo dịch vụ nhiệt độ
+    this.thermostatService = new hap.Service.Thermostat(this.model);
+
+    // Cấu hình chỉ cho phép chế độ "HEAT"
+    this.thermostatService
+      .getCharacteristic(hap.Characteristic.TargetHeatingCoolingState)
+      .setProps({
+        validValues: [hap.Characteristic.TargetHeatingCoolingState.HEAT] // Chỉ cho phép chế độ HEAT
+      })
+      .onGet(() => hap.Characteristic.TargetHeatingCoolingState.HEAT); // Mặc định là HEAT
+
+    this.thermostatService
+      .getCharacteristic(hap.Characteristic.CurrentHeatingCoolingState)
+      .onGet(() => hap.Characteristic.CurrentHeatingCoolingState.HEAT); // Mặc định trạng thái là HEAT
+
+    // Cập nhật nhiệt độ hiện tại
+    this.thermostatService
+      .getCharacteristic(hap.Characteristic.CurrentTemperature)
+      .onGet(this.getCurrentTemperature.bind(this));
+
+    // Điều chỉnh nhiệt độ với giá trị hợp lệ (tối thiểu là 10)
+    this.thermostatService
+      .getCharacteristic(hap.Characteristic.TargetTemperature)
+      .setProps({
+        minValue: 10, // Đặt giá trị tối thiểu để tránh lỗi
+        maxValue: 100, // Giá trị tối đa có thể đặt
+      })
+      .onGet(this.getCurrentTemperature.bind(this))
+      .onSet(this.setTemperature.bind(this));
 
     // Thêm chức năng bật/tắt thiết bị
     this.thermostatService
@@ -45,6 +72,11 @@ class AristonWaterHeater {
   // Cung cấp các dịch vụ
   getServices() {
     return [this.informationService, this.thermostatService];
+  }
+
+  // Trả về nhiệt độ hiện tại
+  getCurrentTemperature() {
+    return this.temperature;
   }
 
   // Trả về trạng thái bật/tắt
@@ -87,7 +119,7 @@ class AristonWaterHeater {
       rejectUnauthorized: false
     }, (err, resp, body) => {
       if (err || resp.statusCode !== 200) {
-        this.log("Error logging in: " + (err || resp.statusCode));
+        this.log("Error logging in: " + err || resp.statusCode);
         return;
       }
       
@@ -157,7 +189,7 @@ class AristonWaterHeater {
       rejectUnauthorized: false
     }, (err, resp, body) => {
       if (err || resp.statusCode !== 200) {
-        this.log("Error fetching temperature data: " + (err || resp.statusCode));
+        this.log("Error fetching temperature data: " + err || resp.statusCode);
         return;
       }
 
