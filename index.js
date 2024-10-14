@@ -75,21 +75,31 @@ class AristonWaterHeater {
 
   async login() {
     try {
-      this.log("Logging in to Ariston API...");
+      // Prepare the request body and headers
+      const requestBody = JSON.stringify({
+        usr: this.username,
+        pwd: this.password,
+        imp: false,
+        notTrack: true,
+        appInfo: { os: 2, appVer: "5.6.7772.40151", appId: "com.remotethermo.aristonnet" }
+      });
+  
+      const requestHeaders = {
+        "Accept": "application/json, text/json, text/x-json, text/javascript, application/xml, text/xml",
+        "User-Agent": "RestSharp/106.11.7.0",
+        "Host": "www.ariston-net.remotethermo.com",
+        "Content-Type": "application/json"
+      };
+  
+      // Log the full request details (headers and body)
+      this.log("Request Body: ", requestBody);
+      this.log("Request Headers: ", requestHeaders);
+  
+      // Send the request and log the response
       const response = await request.post({
         url: "https://www.ariston-net.remotethermo.com/api/v2/accounts/login",
-        body: JSON.stringify({
-          usr: this.username,
-          pwd: this.password,
-          imp: false,
-          notTrack: true,
-          appInfo: { os: 2, appVer: "5.6.7772.40151", appId: "com.remotethermo.aristonnet" }
-        }),
-        headers: {
-          "Accept": "application/json",
-          "Content-Type": "application/json",
-          "User-Agent": "RestSharp/106.11.7.0"
-        },
+        body: requestBody,
+        headers: requestHeaders,
         json: true,
         maxAttempts: 3,
         retryDelay: 6000,
@@ -97,7 +107,8 @@ class AristonWaterHeater {
         rejectUnauthorized: false
       });
   
-      this.log("Login response: ", response.body); // Log full response body for debugging
+      // Log the full response for further debugging
+      this.log("Full login response:", response);
   
       if (response && response.body) {
         this.authToken = response.body.authToken; // Store auth token
@@ -109,6 +120,7 @@ class AristonWaterHeater {
       this.log("Login error: " + error);
     }
   }
+  
   
 
   async updateDeviceData() {
