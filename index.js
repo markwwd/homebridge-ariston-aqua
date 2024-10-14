@@ -17,9 +17,11 @@ class AristonWaterHeater {
     this.username = config.username;
     this.password = config.password;
     this.plantId = config.plantId;
+    this.model = config.model || 'Unknown Model'; // Thêm model
+    this.serialNumber = config.serial_number || 'Unknown Serial'; // Thêm serial number
     this.token = null;
-    this.powerState = false; // Lưu trạng thái bật/tắt
-    this.targetTemperature = 30; // Nhiệt độ mục tiêu mặc định
+    this.powerState = false;
+    this.targetTemperature = 30;
 
     this.heaterService = new Service.Thermostat(this.name);
 
@@ -44,14 +46,19 @@ class AristonWaterHeater {
     this.heaterService
       .getCharacteristic(Characteristic.TargetHeatingCoolingState)
       .setProps({
-        validValues: [Characteristic.TargetHeatingCoolingState.OFF, Characteristic.TargetHeatingCoolingState.HEAT] // Chỉ hiển thị OFF và HEAT
+        validValues: [Characteristic.TargetHeatingCoolingState.OFF, Characteristic.TargetHeatingCoolingState.HEAT]
       })
       .on('set', this.setHeatingState.bind(this));
+
+    // Thêm Service.AccessoryInformation cho model và serial number
+    this.informationService = new Service.AccessoryInformation()
+      .setCharacteristic(Characteristic.Manufacturer, 'Ariston')
+      .setCharacteristic(Characteristic.Model, this.model)
+      .setCharacteristic(Characteristic.SerialNumber, this.serialNumber);
 
     this.login();
   }
 
-  // Phương thức đăng nhập và lấy token
   async login() {
     try {
       const response = await axios.post('https://www.ariston-net.remotethermo.com/api/v2/accounts/login', {
@@ -77,7 +84,6 @@ class AristonWaterHeater {
     }
   }
 
-  // Lấy nhiệt độ hiện tại
   async getCurrentTemperature(callback) {
     if (!this.token) {
       callback(null, 30); // Mặc định là 30 nếu không có token
@@ -106,7 +112,6 @@ class AristonWaterHeater {
     }
   }
 
-  // Lấy nhiệt độ mục tiêu
   async getTargetTemperature(callback) {
     if (!this.token || !this.powerState) {
       callback(null, this.targetTemperature); // Trả về giá trị đã lưu
@@ -132,7 +137,6 @@ class AristonWaterHeater {
     }
   }
 
-  // Đặt nhiệt độ mong muốn
   async setTargetTemperature(value, callback) {
     if (!this.token) {
       this.log('No token, cannot set temperature');
@@ -168,14 +172,12 @@ class AristonWaterHeater {
     }
   }
 
-  // Bật/tắt máy sưởi
   async setHeatingState(value, callback) {
     if (!this.token) {
       callback(new Error('No token'));
       return;
     }
 
-    // Chỉ cho phép bật (HEAT) hoặc tắt (OFF)
     const powerState = value === Characteristic.TargetHeatingCoolingState.HEAT;
     this.powerState = powerState; // Cập nhật trạng thái bật/tắt
     this.log(powerState ? 'Turning heater ON' : 'Turning heater OFF');
@@ -201,18 +203,15 @@ class AristonWaterHeater {
     }
   }
 
-  // Lấy trạng thái bật/tắt của máy sưởi
   getHeatingState(callback) {
     if (this.powerState) {
-      // Nếu máy sưởi bật, trả về HEAT và lấy nhiệt độ mục tiêu
       callback(null, Characteristic.CurrentHeatingCoolingState.HEAT);
     } else {
-      // Nếu máy sưởi tắt, trả về OFF
       callback(null, Characteristic.CurrentHeatingCoolingState.OFF);
     }
   }
 
   getServices() {
-    return [this.heaterService];
+    return [this.heaterService, this.informationService]; // Bao gồm cả AccessoryInformation
   }
 }

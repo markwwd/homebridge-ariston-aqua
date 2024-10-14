@@ -24,15 +24,15 @@ Example accessory config (needs to be added to the Homebridge `config.json`):
 
   ```
  "accessories": [
-     {
-        "accessory": "Aristonnet",
-        "name": "Water Heater",
-        "username": "email@email.com",
-        "password": "passss",
-        "plantID": "XXXX",
-        "model": "VELIS Tech Dry",
-        "serial_number": "123456789"
-     }
+    {
+      "accessory": "AristonWaterHeater",
+      "name": "My Heater", (can change name)
+      "username": "email@gmail.com",
+      "password": "your_password",
+      "plantId": "your_plant_id"
+      "model": "VELIS Tech Dry", (can change model)
+      "serial_number": "123456789" (can change serial number)
+    }
  ]
   ```
 
