@@ -19,6 +19,7 @@ class AristonWaterHeater {
     this.plantId = config.plantId;
     this.token = null;
     this.powerState = false; // Lưu trạng thái bật/tắt
+    this.targetTemperature = 30; // Nhiệt độ mục tiêu mặc định
 
     this.heaterService = new Service.Thermostat(this.name);
 
@@ -29,7 +30,8 @@ class AristonWaterHeater {
         maxValue: 100,
         minStep: 1
       })
-      .on('set', this.setTargetTemperature.bind(this));
+      .on('set', this.setTargetTemperature.bind(this))
+      .on('get', this.getTargetTemperature.bind(this));
 
     this.heaterService
       .getCharacteristic(Characteristic.CurrentTemperature)
@@ -104,6 +106,32 @@ class AristonWaterHeater {
     }
   }
 
+  // Lấy nhiệt độ mục tiêu
+  async getTargetTemperature(callback) {
+    if (!this.token || !this.powerState) {
+      callback(null, this.targetTemperature); // Trả về giá trị đã lưu
+      return;
+    }
+
+    try {
+      const response = await axios.get(`https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantId}`, {
+        headers: {
+          'ar.authToken': this.token,
+        },
+      });
+
+      let procReqTemp = response.data.procReqTemp;
+      let reqTemp = response.data.reqTemp;
+      this.targetTemperature = procReqTemp || reqTemp || 30; // Lấy từ procReqTemp hoặc reqTemp, mặc định là 30
+
+      this.log('Target temperature:', this.targetTemperature);
+      callback(null, this.targetTemperature);
+    } catch (error) {
+      this.log('Error getting target temperature:', error);
+      callback(null, 30); // Mặc định là 30°C nếu lỗi
+    }
+  }
+
   // Đặt nhiệt độ mong muốn
   async setTargetTemperature(value, callback) {
     if (!this.token) {
@@ -113,6 +141,7 @@ class AristonWaterHeater {
     }
 
     value = Math.max(30, Math.min(value, 100)); // Giới hạn nhiệt độ từ 30 đến 100
+    this.targetTemperature = value;
 
     try {
       const response = await axios.post(`https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantId}/temperature`, {
@@ -175,7 +204,7 @@ class AristonWaterHeater {
   // Lấy trạng thái bật/tắt của máy sưởi
   getHeatingState(callback) {
     if (this.powerState) {
-      // Nếu máy sưởi bật, trả về HEAT
+      // Nếu máy sưởi bật, trả về HEAT và lấy nhiệt độ mục tiêu
       callback(null, Characteristic.CurrentHeatingCoolingState.HEAT);
     } else {
       // Nếu máy sưởi tắt, trả về OFF
