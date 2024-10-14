@@ -4,112 +4,99 @@ let hap;
 
 module.exports = function(api) {
   hap = api.hap;
-  api.registerAccessory("homebridge-aristonnet", "AristonNet", AristonWaterHeater);
+  api.registerAccessory("homebridge-aristonaquawh", "AristonAquaWH", AristonWaterHeater);
 }
 
 class AristonWaterHeater {
   constructor(log, config, api) {
-    this.log = log;
-    this.username = config["username"] || "";
-    this.password = config["password"] || "";
-    this.plantID = config["plantID"] || "";
-    this.model = config["model"] || "VELIS Tech Dry";
-    this.serial_number = config["serial_number"] || "123456789";
+    try {
+      this.log = log;
 
-    this.interval = 600; // Thời gian cập nhật (600 giây)
-    this.temperature = 10; // Nhiệt độ khởi tạo (tạm thời) sẽ được cập nhật từ thiết bị
-    this.powerState = false; // Trạng thái bật/tắt khởi tạo sẽ lấy từ API
-    this.token = null; // Token cho API
+      this.name = config["name"];
+      this.username = config["username"] || "";
+      this.password = config["password"] || "";
+      this.plantID = config["plantID"] || "";
+      this.model = config["model"] || "VELIS Tech Dry";
+      this.serial_number = config["serial_number"] || "123456789";
 
-    // Khởi tạo thông tin thiết bị
-    this.informationService = new hap.Service.AccessoryInformation();
-    this.informationService
-      .setCharacteristic(hap.Characteristic.Name, this.model)
-      .setCharacteristic(hap.Characteristic.Manufacturer, "Ariston")
-      .setCharacteristic(hap.Characteristic.Model, this.model)
-      .setCharacteristic(hap.Characteristic.SerialNumber, this.serial_number);
+      this.interval = 600; // Update interval in seconds
+      this.temperature = 10; // Initial temperature value
+      this.powerState = false; // Initial power state
 
-    // Khởi tạo dịch vụ điều khiển nhiệt độ
-    this.thermostatService = new hap.Service.Thermostat(this.model);
+      // Initialize accessory information service
+      this.informationService = new hap.Service.AccessoryInformation();
+      this.informationService
+        .setCharacteristic(hap.Characteristic.Name, this.name)
+        .setCharacteristic(hap.Characteristic.Manufacturer, "Ariston")
+        .setCharacteristic(hap.Characteristic.Model, this.model)
+        .setCharacteristic(hap.Characteristic.SerialNumber, this.serial_number);
 
-    // Chỉ cho phép chế độ "HEAT" khi bật
-    this.thermostatService
-      .getCharacteristic(hap.Characteristic.TargetHeatingCoolingState)
-      .setProps({
-        validValues: [hap.Characteristic.TargetHeatingCoolingState.OFF, hap.Characteristic.TargetHeatingCoolingState.HEAT] // Cho phép bật là HEAT và tắt
-      })
-      .onGet(this.getCurrentHeatingCoolingState.bind(this)) // Lấy trạng thái bật/tắt hiện tại của thiết bị
-      .onSet(this.setHeatingCoolingState.bind(this)); // Cài đặt trạng thái
+      // Initialize thermostat service
+      this.thermostatService = new hap.Service.Thermostat(this.name);
+      
+      // Current temperature characteristic
+      this.thermostatService
+        .getCharacteristic(hap.Characteristic.CurrentTemperature)
+        .onGet(this.getCurrentTemperature.bind(this));
 
-    // Lấy nhiệt độ hiện tại của thiết bị
-    this.thermostatService
-      .getCharacteristic(hap.Characteristic.CurrentTemperature)
-      .onGet(this.getCurrentTemperature.bind(this));
+      // Target temperature characteristic (to set a new temperature)
+      this.thermostatService
+        .getCharacteristic(hap.Characteristic.TargetTemperature)
+        .setProps({ minValue: 10, maxValue: 65 })
+        .onSet(this.setTemperature.bind(this))
+        .onGet(this.getCurrentTemperature.bind(this));
 
-    // Điều chỉnh nhiệt độ với giá trị hợp lệ (tối thiểu là 10)
-    this.thermostatService
-      .getCharacteristic(hap.Characteristic.TargetTemperature)
-      .setProps({
-        minValue: 10, // Đặt giá trị tối thiểu là 10
-        maxValue: 65, // Đặt giá trị tối đa là 65
-      })
-      .onGet(this.getCurrentTemperature.bind(this)) // Lấy nhiệt độ hiện tại
-      .onSet(this.setTemperature.bind(this)); // Cài đặt nhiệt độ
+      // Power state control (Heat or Off)
+      this.thermostatService
+        .getCharacteristic(hap.Characteristic.TargetHeatingCoolingState)
+        .setProps({
+          validValues: [hap.Characteristic.TargetHeatingCoolingState.OFF, hap.Characteristic.TargetHeatingCoolingState.HEAT]
+        })
+        .onSet(this.setPowerState.bind(this))
+        .onGet(this.getPowerState.bind(this));
 
-    // Đăng nhập vào API và lấy dữ liệu ban đầu
-    this.loginToAPI();
+      // Start data update cycle
+      this.updateDeviceData();
+      setInterval(this.updateDeviceData.bind(this), this.interval * 1000);
+    }
+    catch (error) {
+      this.log("Error initializing module: " + error);
+    }
   }
 
-  // Cung cấp các dịch vụ
+  // Provide the services
   getServices() {
     return [this.informationService, this.thermostatService];
   }
 
-  // Trả về trạng thái hiện tại (bật là HEAT, tắt là OFF)
-  getCurrentHeatingCoolingState() {
-    return this.powerState ? hap.Characteristic.TargetHeatingCoolingState.HEAT : hap.Characteristic.TargetHeatingCoolingState.OFF;
-  }
-
-  // Đặt trạng thái bật/tắt thiết bị
-  async setHeatingCoolingState(value) {
-    const isPowerOn = value === hap.Characteristic.TargetHeatingCoolingState.HEAT;
-    this.powerState = isPowerOn;
-    this.log("Setting power state to: " + (isPowerOn ? "HEAT" : "OFF"));
-    await this.controlDevicePower(isPowerOn);
-  }
-
-  // Trả về nhiệt độ hiện tại của thiết bị
+  // Return the current temperature
   getCurrentTemperature() {
     return this.temperature;
   }
 
-  // Đặt nhiệt độ mới
+  // Set a new target temperature
   async setTemperature(newTemperature) {
-    const oldTemperature = this.temperature; // Lưu nhiệt độ cũ
-    const data = {
-      eco: false,
-      new: newTemperature,
-      old: oldTemperature
-    };
+    const oldTemperature = this.temperature;
+    const data = { eco: false, new: newTemperature, old: oldTemperature };
 
     try {
       const response = await request.post({
         url: `https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantID}/temperature`,
         headers: {
-          'ar.authToken': this.token, // Thêm token vào tiêu đề
-          'Accept': 'application/json, text/json, text/x-json, text/javascript, application/xml, text/xml',
+          'ar.authToken': this.token,
+          'Accept': 'application/json',
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(data), // Gửi dữ liệu với nhiệt độ mới và cũ
+        body: JSON.stringify(data),
         json: true,
         maxAttempts: 3,
         retryDelay: 6000,
         retryStrategy: request.RetryStrategies.HTTPOrNetworkError,
-        rejectUnauthorized: false,
+        rejectUnauthorized: false
       });
 
       if (response.statusCode === 200 && response.body.success) {
-        this.temperature = newTemperature; // Cập nhật nhiệt độ
+        this.temperature = newTemperature; // Update temperature
         this.log("Successfully changed temperature to: " + newTemperature);
       } else {
         throw new Error(`Failed to change temperature: ${response.statusCode}`);
@@ -119,77 +106,16 @@ class AristonWaterHeater {
     }
   }
 
-  // Đăng nhập vào API và lấy trạng thái khởi tạo
-  loginToAPI() {
-    const loginData = {
-      usr: this.username,
-      pwd: this.password,
-      imp: false,
-      notTrack: true,
-      appInfo: {
-        os: 2,
-        appVer: "5.6.7772.40151",
-        appId: "com.remotethermo.aristonnet"
-      }
-    };
-
-    request.post({
-      url: 'https://www.ariston-net.remotethermo.com/api/v2/accounts/login',
-      body: JSON.stringify(loginData),
-      headers: {
-        'Accept': 'application/json, text/json, text/x-json, text/javascript, application/xml, text/xml',
-        'Content-Type': 'application/json'
-      },
-      json: true,
-      maxAttempts: 3,
-      retryDelay: 6000,
-      retryStrategy: request.RetryStrategies.HTTPOrNetworkError,
-      rejectUnauthorized: false
-    }, (err, resp, body) => {
-      if (err || resp.statusCode !== 200) {
-        this.log("Error logging in: " + err || resp.statusCode);
-        return;
-      }
-      
-      this.token = body.token; // Lưu token
-      this.log("Successfully logged in. Token: " + this.token);
-      
-      // Lấy thông tin ban đầu từ thiết bị
-      this.updateDeviceData();
-      setInterval(this.updateDeviceData.bind(this), this.interval * 1000);
-    });
+  // Return the current power state (Heat/Off)
+  getPowerState() {
+    return this.powerState ? hap.Characteristic.TargetHeatingCoolingState.HEAT : hap.Characteristic.TargetHeatingCoolingState.OFF;
   }
 
-  // Lấy trạng thái và nhiệt độ hiện tại từ API
-  updateDeviceData() {
-    this.log("Fetching current device data...");
+  // Set the power state (turn the device on/off)
+  async setPowerState(value) {
+    const isPowerOn = value === hap.Characteristic.TargetHeatingCoolingState.HEAT;
+    this.powerState = isPowerOn;
 
-    request({
-      url: `https://www.ariston-net.remotethermo.com/api/v2/velis/plantData/${this.plantID}`,
-      headers: {
-        'ar.authToken': this.token // Thêm token vào tiêu đề
-      },
-      jar: true,
-      json: true,
-      maxAttempts: 3,
-      retryDelay: 6000,
-      retryStrategy: request.RetryStrategies.HTTPOrNetworkError,
-      rejectUnauthorized: false
-    }, (err, resp, body) => {
-      if (err || resp.statusCode !== 200) {
-        this.log("Error fetching device data: " + err || resp.statusCode);
-        return;
-      }
-
-      // Cập nhật nhiệt độ và trạng thái bật/tắt
-      this.temperature = body.temp || 10; // Đảm bảo nhiệt độ không dưới 10
-      this.powerState = body.powerState || false; // Cập nhật trạng thái bật/tắt
-      this.log("Success updating temperature: " + this.temperature + ", Power State: " + (this.powerState ? "On" : "Off"));
-    });
-  }
-
-  // Điều khiển trạng thái bật/tắt thiết bị
-  async controlDevicePower(isPowerOn) {
     try {
       const response = await request.post({
         url: `https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantID}/switch`,
@@ -199,7 +125,7 @@ class AristonWaterHeater {
           'Content-Type': 'application/json'
         },
         json: true,
-        body: { state: isPowerOn }, // Trạng thái bật hoặc tắt
+        body: { state: isPowerOn }, // Power on/off
         maxAttempts: 3,
         retryDelay: 6000,
         retryStrategy: request.RetryStrategies.HTTPOrNetworkError,
@@ -214,5 +140,62 @@ class AristonWaterHeater {
     } catch (error) {
       this.log("Error controlling power state: " + error);
     }
+  }
+
+  // Update device data (temperature and power state)
+  updateDeviceData() {
+    try {
+      this.log("Updating temperature and power state data...");
+      getTemperatureAPI(this);
+    }
+    catch (error) {
+      this.log("Error updating temperature: " + error);
+    }
+  }
+}
+
+// Helper function to get temperature and power state from the API
+function getTemperatureAPI(that) {
+  try {
+    request.post({
+      url: "https://www.ariston-net.remotethermo.com/api/v2/accounts/login",
+      form: {
+        Email: that.username,
+        Password: that.password,
+        RememberMe: false
+      },
+      jar: true,
+      json: true,
+      maxAttempts: 3,
+      retryDelay: 6000,
+      retryStrategy: request.RetryStrategies.HTTPOrNetworkError,
+      rejectUnauthorized: false
+    }, function(err, resp, body) {
+      if (!err && resp.statusCode === 200) {
+        // If login is successful, fetch temperature and power state data
+        request({
+          url: `https://www.ariston-net.remotethermo.com/api/v2/velis/plantData/${that.plantID}`,
+          jar: true,
+          json: true,
+          maxAttempts: 3,
+          retryDelay: 6000,
+          retryStrategy: request.RetryStrategies.HTTPOrNetworkError,
+          rejectUnauthorized: false
+        }, function(err, resp, body) {
+          if (!err && resp.statusCode === 200) {
+            that.temperature = body.temp || 10; // Update temperature
+            that.powerState = body.powerState || false; // Update power state
+            that.log("Successfully updated temperature: " + that.temperature + ", Power State: " + (that.powerState ? "On" : "Off"));
+          } else {
+            that.log("Error fetching temperature and power state data: " + (err || resp.statusCode));
+          }
+        });
+      } else {
+        that.log("Login error: " + (err || resp.statusCode));
+      }
+    });
+  }
+  catch (error) {
+    that.log("Error in API request: " + error);
   }
 }
