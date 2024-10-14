@@ -79,8 +79,8 @@ class AristonWaterHeater {
         },
       });
 
-      const currentTemperature = response.data.temperature;
-      // Kiểm tra giá trị nhiệt độ hợp lệ
+      // So sánh và chuyển đổi giá trị nhiệt độ
+      const currentTemperature = response.data.temp; // Lấy giá trị nhiệt độ từ API
       if (typeof currentTemperature !== 'number' || !isFinite(currentTemperature)) {
         this.log('Current temperature is invalid:', currentTemperature);
         callback(new Error('Invalid current temperature'));
