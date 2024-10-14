@@ -1,6 +1,6 @@
 {
   "name": "homebridge-aristonnet",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "A plugin for control Ariston Water Heater",
   "main": "index.js",
   "engines": {
@@ -28,6 +28,7 @@
   },
   "homepage": "https://github.com/fhihung/homebridge-aristonnet#readme",
   "dependencies": {
-    "requestretry": "^7.1.0"
+    "requestretry": "^7.1.0",
+    "axios": "^1.7.2"
   }
 }
