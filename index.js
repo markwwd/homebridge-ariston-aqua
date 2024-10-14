@@ -18,6 +18,8 @@ class AristonWaterHeater {
     this.password = config.password;
     this.plantId = config.plantId;
     this.token = null;
+    this.powerState = false; // Lưu trạng thái bật/tắt
+
     this.heaterService = new Service.Thermostat(this.name);
 
     this.heaterService
@@ -146,6 +148,7 @@ class AristonWaterHeater {
 
     // Chỉ cho phép bật (HEAT) hoặc tắt (OFF)
     const powerState = value === Characteristic.TargetHeatingCoolingState.HEAT;
+    this.powerState = powerState; // Cập nhật trạng thái bật/tắt
     this.log(powerState ? 'Turning heater ON' : 'Turning heater OFF');
 
     try {
@@ -171,8 +174,13 @@ class AristonWaterHeater {
 
   // Lấy trạng thái bật/tắt của máy sưởi
   getHeatingState(callback) {
-    // Giả định luôn trả về trạng thái HEAT khi bật
-    callback(null, Characteristic.CurrentHeatingCoolingState.HEAT);
+    if (this.powerState) {
+      // Nếu máy sưởi bật, trả về HEAT
+      callback(null, Characteristic.CurrentHeatingCoolingState.HEAT);
+    } else {
+      // Nếu máy sưởi tắt, trả về OFF
+      callback(null, Characteristic.CurrentHeatingCoolingState.OFF);
+    }
   }
 
   getServices() {
