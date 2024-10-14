@@ -96,17 +96,20 @@ class AristonWaterHeater {
         retryStrategy: request.RetryStrategies.HTTPOrNetworkError,
         rejectUnauthorized: false
       });
-
+  
+      this.log("Login response: ", response.body); // Log full response body for debugging
+  
       if (response && response.body) {
         this.authToken = response.body.authToken; // Store auth token
         this.log("Login successful. Auth Token: " + this.authToken);
       } else {
-        this.log("Login failed.");
+        this.log("Login failed. Response: ", response);
       }
     } catch (error) {
       this.log("Login error: " + error);
     }
   }
+  
 
   async updateDeviceData() {
     try {
