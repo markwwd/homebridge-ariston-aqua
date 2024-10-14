@@ -80,6 +80,13 @@ class AristonWaterHeater {
       });
 
       const currentTemperature = response.data.temperature;
+      // Kiểm tra giá trị nhiệt độ hợp lệ
+      if (typeof currentTemperature !== 'number' || !isFinite(currentTemperature)) {
+        this.log('Current temperature is invalid:', currentTemperature);
+        callback(new Error('Invalid current temperature'));
+        return;
+      }
+
       this.log('Current temperature:', currentTemperature);
       callback(null, currentTemperature);
     } catch (error) {
@@ -95,6 +102,9 @@ class AristonWaterHeater {
       callback(new Error('No token'));
       return;
     }
+
+    // Giới hạn nhiệt độ tối thiểu và tối đa
+    value = Math.max(30, Math.min(value, 100));
 
     try {
       const response = await axios.post(`https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantId}/temperature`, {
@@ -128,6 +138,7 @@ class AristonWaterHeater {
       return;
     }
 
+    // Chỉ cho phép bật (HEAT) hoặc tắt (OFF)
     const powerState = value === Characteristic.TargetHeatingCoolingState.HEAT;
     this.log(powerState ? 'Turning heater ON' : 'Turning heater OFF');
 
