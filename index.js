@@ -7,22 +7,34 @@ module.exports = (homebridge) => {
   Characteristic = homebridge.hap.Characteristic;
   UUIDGen = homebridge.hap.uuid;
 
-  homebridge.registerAccessory('homebridge-aristonnet', 'AristonHeater', AristonHeater);
+  homebridge.registerAccessory('homebridge-aristonnet', 'AristonWaterHeater', AristonWaterHeater);
 };
 
-class AristonHeater {
+class AristonWaterHeater {
   constructor(log, config) {
     this.log = log;
     this.name = config.name || 'Ariston Heater';
     this.username = config.username;
     this.password = config.password;
+    this.plantId = config.plantId; // plantId từ file config
     this.token = null;
-    this.deviceId = config.deviceId;
     this.heaterService = new Service.Thermostat(this.name);
 
     this.heaterService
       .getCharacteristic(Characteristic.TargetTemperature)
       .on('set', this.setTargetTemperature.bind(this));
+
+    this.heaterService
+      .getCharacteristic(Characteristic.CurrentTemperature)
+      .on('get', this.getCurrentTemperature.bind(this));
+
+    this.heaterService
+      .getCharacteristic(Characteristic.CurrentHeatingCoolingState)
+      .on('get', this.getHeatingState.bind(this));
+
+    this.heaterService
+      .getCharacteristic(Characteristic.TargetHeatingCoolingState)
+      .on('set', this.setHeatingState.bind(this));
 
     this.login();
   }
@@ -53,7 +65,30 @@ class AristonHeater {
     }
   }
 
-  // Điều chỉnh nhiệt độ
+  // Lấy nhiệt độ hiện tại
+  async getCurrentTemperature(callback) {
+    if (!this.token) {
+      callback(new Error('No token'));
+      return;
+    }
+
+    try {
+      const response = await axios.get(`https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantId}/temperature`, {
+        headers: {
+          'ar.authToken': this.token,
+        },
+      });
+
+      const currentTemperature = response.data.temperature;
+      this.log('Current temperature:', currentTemperature);
+      callback(null, currentTemperature);
+    } catch (error) {
+      this.log('Error getting current temperature:', error);
+      callback(error);
+    }
+  }
+
+  // Đặt nhiệt độ mong muốn
   async setTargetTemperature(value, callback) {
     if (!this.token) {
       this.log('No token, cannot set temperature');
@@ -62,21 +97,66 @@ class AristonHeater {
     }
 
     try {
-      const response = await axios.post(`https://www.ariston-net.remotethermo.com/api/v2/heaters/${this.deviceId}/set-temperature`, {
-        temperature: value,
+      const response = await axios.post(`https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantId}/temperature`, {
+        eco: false,
+        new: value,
+        old: 70,  // Cần lấy giá trị cũ từ hệ thống nếu cần
       }, {
         headers: {
-          Authorization: `Bearer ${this.token}`,
+          'ar.authToken': this.token,
           'Content-Type': 'application/json',
         },
       });
 
-      this.log(`Temperature set to ${value}°C`);
-      callback(null);
+      if (response.data.success) {
+        this.log(`Target temperature set to ${value}°C`);
+        callback(null);
+      } else {
+        this.log('Error setting target temperature');
+        callback(new Error('Failed to set target temperature'));
+      }
     } catch (error) {
       this.log('Error setting temperature:', error);
       callback(error);
     }
+  }
+
+  // Bật/tắt máy sưởi
+  async setHeatingState(value, callback) {
+    if (!this.token) {
+      callback(new Error('No token'));
+      return;
+    }
+
+    const powerState = value === Characteristic.TargetHeatingCoolingState.HEAT;
+    this.log(powerState ? 'Turning heater ON' : 'Turning heater OFF');
+
+    try {
+      const response = await axios.post(`https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantId}/switch`, powerState, {
+        headers: {
+          'ar.authToken': this.token,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.data.success) {
+        this.log('Heater state updated successfully');
+        callback(null);
+      } else {
+        this.log('Error updating heater state');
+        callback(new Error('Failed to update heater state'));
+      }
+    } catch (error) {
+      this.log('Error updating heater state:', error);
+      callback(error);
+    }
+  }
+
+  // Lấy trạng thái bật/tắt của máy sưởi
+  getHeatingState(callback) {
+    // Lấy trạng thái hiện tại từ hệ thống (ví dụ: máy sưởi đang bật/tắt)
+    // Ở đây giả định luôn trả về trạng thái HEAT
+    callback(null, Characteristic.CurrentHeatingCoolingState.HEAT);
   }
 
   getServices() {
