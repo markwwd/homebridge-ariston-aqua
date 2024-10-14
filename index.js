@@ -73,7 +73,7 @@ class AristonWaterHeater {
     }
 
     try {
-      const response = await axios.get(`https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantId}/temperature`, {
+      const response = await axios.get(`https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantId}`, {
         headers: {
           'ar.authToken': this.token,
         },
