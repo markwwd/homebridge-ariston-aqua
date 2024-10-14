@@ -16,12 +16,17 @@ class AristonWaterHeater {
     this.name = config.name || 'Ariston Heater';
     this.username = config.username;
     this.password = config.password;
-    this.plantId = config.plantId; // plantId từ file config
+    this.plantId = config.plantId;
     this.token = null;
     this.heaterService = new Service.Thermostat(this.name);
 
     this.heaterService
       .getCharacteristic(Characteristic.TargetTemperature)
+      .setProps({
+        minValue: 30,
+        maxValue: 100,
+        minStep: 1
+      })
       .on('set', this.setTargetTemperature.bind(this));
 
     this.heaterService
@@ -34,6 +39,9 @@ class AristonWaterHeater {
 
     this.heaterService
       .getCharacteristic(Characteristic.TargetHeatingCoolingState)
+      .setProps({
+        validValues: [Characteristic.TargetHeatingCoolingState.OFF, Characteristic.TargetHeatingCoolingState.HEAT] // Chỉ hiển thị OFF và HEAT
+      })
       .on('set', this.setHeatingState.bind(this));
 
     this.login();
@@ -68,7 +76,7 @@ class AristonWaterHeater {
   // Lấy nhiệt độ hiện tại
   async getCurrentTemperature(callback) {
     if (!this.token) {
-      callback(new Error('No token'));
+      callback(null, 30); // Mặc định là 30 nếu không có token
       return;
     }
 
@@ -79,19 +87,18 @@ class AristonWaterHeater {
         },
       });
 
-      // So sánh và chuyển đổi giá trị nhiệt độ
-      const currentTemperature = response.data.temp; // Lấy giá trị nhiệt độ từ API
+      let currentTemperature = response.data.temp;
+
       if (typeof currentTemperature !== 'number' || !isFinite(currentTemperature)) {
-        this.log('Current temperature is invalid:', currentTemperature);
-        callback(new Error('Invalid current temperature'));
-        return;
+        this.log('Current temperature is invalid, defaulting to 30°C');
+        currentTemperature = 30; // Mặc định là 30°C nếu không hợp lệ
       }
 
       this.log('Current temperature:', currentTemperature);
       callback(null, currentTemperature);
     } catch (error) {
       this.log('Error getting current temperature:', error);
-      callback(error);
+      callback(null, 30); // Mặc định là 30°C nếu lỗi
     }
   }
 
@@ -103,8 +110,7 @@ class AristonWaterHeater {
       return;
     }
 
-    // Giới hạn nhiệt độ tối thiểu và tối đa
-    value = Math.max(30, Math.min(value, 100));
+    value = Math.max(30, Math.min(value, 100)); // Giới hạn nhiệt độ từ 30 đến 100
 
     try {
       const response = await axios.post(`https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantId}/temperature`, {
@@ -165,8 +171,7 @@ class AristonWaterHeater {
 
   // Lấy trạng thái bật/tắt của máy sưởi
   getHeatingState(callback) {
-    // Lấy trạng thái hiện tại từ hệ thống (ví dụ: máy sưởi đang bật/tắt)
-    // Ở đây giả định luôn trả về trạng thái HEAT
+    // Giả định luôn trả về trạng thái HEAT khi bật
     callback(null, Characteristic.CurrentHeatingCoolingState.HEAT);
   }
 
