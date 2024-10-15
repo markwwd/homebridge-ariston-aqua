@@ -1,41 +1,80 @@
-# homebridge-aristonnet
-Homebridge module for Ariston Aqua Water Heater
+Here’s a more polished and detailed version of the README for your Homebridge AristonNet plugin:
 
-# Description
+---
 
-Homebridge plugin gets the current temperature from Ariston Aqua Water Heaters, like Velis and Velis Tech Dry.
-The plugin uses the data from https://www.ariston-net.remotethermo.com/ so you need to have a account there, is the same as the Ariston mobile app. Put the account data on the plugin configuration (see below), the plandID for you device is the ID you see on the URL once you log in into the wesite.
+# Homebridge AristonNet
 
-# Installation
+**Homebridge Plugin for Ariston Aqua Water Heaters**
 
-1. Install homebridge using: `npm install -g homebridge`
-2. Install this plugin using: `npm install -g homebridge-aristonnet`
-3. Update your configuration file. See the sample below.
+---
 
-If you do not wish to install from npm (e.g, because you are using a fork), you
-may also clone the git repository into some directory like
-`/usr/local/homebridge/plugins/homebridge-aristonnet` and then specify the
-plugin directory as an option (`-P /usr/local/homebridge/plugins`, typically
-using `HOMEBRIDGE_OPTS` in `/etc/default/homebridge`).
+## Description
 
-# Configuration
- 
-Example accessory config (needs to be added to the Homebridge `config.json`):
+This Homebridge plugin allows you to seamlessly control your Ariston Aqua Water Heater devices, such as the **Andris** and **Slim** models, through the **AristonNet platform**. It provides functionalities to **get the current temperature**, **set a target temperature**, and **turn the heater on/off** directly from the Homebridge interface.
 
-  ```
- "accessories": [
-    {
-      "accessory": "AristonWaterHeater",
-      "name": "My Heater", (can change name)
-      "username": "email@gmail.com",
-      "password": "your_password",
-      "plantId": "your_plant_id"
-      "model": "VELIS Tech Dry", (can change model)
-      "serial_number": "123456789" (can change serial number)
-    }
- ]
-  ```
+### Key Features:
+- **Temperature Control**: Get real-time temperature data and set a new target temperature for your water heater.
+- **Power Control**: Turn the heater on or off as needed.
+- **Device Compatibility**: Works with Ariston devices that are connected via the AristonNet platform.
 
-# Todo
+### Requirements:
+- **AristonNet Account**: You need an account on the AristonNet platform ([ariston-net.remotethermo.com](https://www.ariston-net.remotethermo.com/)), which is the same as the Ariston mobile app.
+- **PlantID**: Locate the PlantID for your device in the URL when logged into the AristonNet platform.
 
-Increase or decrease the temperature via plugin.
+### Setup Instructions:
+1. **Log in to AristonNet**: Go to the AristonNet website and log in with your credentials.
+2. **Find your PlantID**: In the URL of your device page, find your PlantID to configure the plugin.
+3. **Configure the Plugin**: Input your AristonNet account credentials and PlantID into the Homebridge configuration file (`config.json`).
+
+---
+
+## Installation
+
+Follow these steps to install and configure the plugin:
+
+1. **Install Homebridge**:
+   ```
+   npm install -g homebridge
+   ```
+2. **Install the AristonNet Plugin**:
+   ```
+   npm install -g homebridge-aristonnet
+   ```
+3. **Configure the Plugin**: Add the necessary details (email, password, PlantID) to your Homebridge configuration file.
+
+### Alternative Installation (Manual):
+If you prefer manual installation (e.g., from a fork):
+- Clone the Git repository to a local directory (e.g., `/usr/local/homebridge/plugins/homebridge-aristonnet`).
+- Set the plugin directory in the Homebridge options: `-P /usr/local/homebridge/plugins` (typically via `HOMEBRIDGE_OPTS` in `/etc/default/homebridge`).
+
+---
+
+## Configuration
+
+Here is an example configuration for adding the Ariston Water Heater to Homebridge (`config.json`):
+
+```json
+"accessories": [
+  {
+    "accessory": "AristonWaterHeater",
+    "name": "My Heater",             // Customizable device name
+    "username": "email@gmail.com",   // Your AristonNet email
+    "password": "your_password",     // Your AristonNet password
+    "plantId": "your_plant_id",      // Device-specific PlantID
+    "model": "VELIS Tech Dry",       // Customizable model name
+    "serial_number": "123456789"     // Optional serial number
+  }
+]
+```
+
+Replace the placeholders with your actual credentials and device information.
+
+---
+
+## To-Do List
+- **UI Enhancement**: Add a user interface for inputting and updating email and password.
+- **Code Refactoring**: Improve code structure for maintainability and performance.
+
+---
+
+Feel free to adapt or expand further as you develop more features for the plugin!
