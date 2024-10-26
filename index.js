@@ -249,7 +249,7 @@ class AristonWaterHeater {
     if (value === Characteristic.TargetHeatingCoolingState.AUTO) {
       // Handle "Auto" mode (set to schedule mode)
       this.log('Setting heater to Schedule Mode');
-      powerState = 'schedule'; // Replace with your API value for schedule mode
+      powerState = 'timer'; // Replace with your API value for schedule mode
     } else {
       powerState = value === Characteristic.TargetHeatingCoolingState.HEAT;
       this.powerState = powerState;
