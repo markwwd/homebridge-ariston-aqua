@@ -7,6 +7,18 @@ module.exports = (homebridge) => {
   Characteristic = homebridge.hap.Characteristic;
   UUIDGen = homebridge.hap.uuid;
 
+  // Create a custom characteristic for AUTO mode (ECO)
+  Characteristic.AutoMode = function () {
+    Characteristic.call(this, 'AUTO Mode', UUIDGen.generate('Custom:AutoMode'));
+    this.setProps({
+      format: Characteristic.Formats.BOOL,
+      perms: [Characteristic.Perms.READ, Characteristic.Perms.WRITE, Characteristic.Perms.NOTIFY]
+    });
+    this.value = this.getDefaultValue();
+  };
+  require('util').inherits(Characteristic.AutoMode, Characteristic);
+  Characteristic.AutoMode.UUID = UUIDGen.generate('Custom:AutoMode');
+
   homebridge.registerAccessory('homebridge-ariston-aqua', 'AristonWaterHeater', AristonWaterHeater);
 };
 
@@ -21,17 +33,15 @@ class AristonWaterHeater {
     this.serialNumber = config.serial_number || 'Unknown Serial';
     this.token = null;
     this.powerState = false;
+    this.autoMode = false; // Track AUTO (ECO) mode state
     this.targetTemperature = 40;
-    this.autoMode = false; // Custom auto mode tracking
 
-    // Data cache time (ms)
     this.cacheDuration = 1000; // 1 second
     this.lastFetchedTime = 0;
     this.cachedTemperature = 40;
 
     this.heaterService = new Service.Thermostat(this.name);
 
-    // Target Temperature characteristic with initial properties
     this.heaterService
       .getCharacteristic(Characteristic.TargetTemperature)
       .setProps({
@@ -50,16 +60,21 @@ class AristonWaterHeater {
       .getCharacteristic(Characteristic.CurrentHeatingCoolingState)
       .on('get', this.getHeatingState.bind(this));
 
-    // Adding a custom characteristic for AUTO mode
-    this.autoModeCharacteristic = new Characteristic("Auto Mode", UUIDGen.generate("AutoModeCharacteristic"))
+    this.heaterService
+      .getCharacteristic(Characteristic.TargetHeatingCoolingState)
       .setProps({
-        format: Characteristic.Formats.BOOL,
-        perms: [Characteristic.Perms.READ, Characteristic.Perms.WRITE, Characteristic.Perms.NOTIFY],
+        validValues: [
+          Characteristic.TargetHeatingCoolingState.OFF,
+          Characteristic.TargetHeatingCoolingState.HEAT,
+        ]
       })
+      .on('set', this.setHeatingState.bind(this));
+
+    // Add custom AUTO mode characteristic
+    this.heaterService
+      .addCharacteristic(Characteristic.AutoMode)
       .on('set', this.setAutoMode.bind(this))
       .on('get', this.getAutoMode.bind(this));
-
-    this.heaterService.addCharacteristic(this.autoModeCharacteristic);
 
     this.informationService = new Service.AccessoryInformation()
       .setCharacteristic(Characteristic.Manufacturer, 'Ariston')
@@ -95,35 +110,16 @@ class AristonWaterHeater {
   }
 
   async setAutoMode(value, callback) {
-    this.autoMode = value;
+    this.autoMode = value; // Track state for Homebridge
+
     if (value) {
-      // Enable AUTO mode: activate ECO mode and disable TargetTemperature adjustments
-      await this.setEcoMode(true);
       this.disableTemperatureControl();
     } else {
-      // Disable AUTO mode: deactivate ECO mode and enable TargetTemperature adjustments
-      await this.setEcoMode(false);
       this.enableTemperatureControl();
     }
+
+    await this.setEcoMode(value); // Set ECO mode on the heater
     callback(null);
-  }
-
-  getAutoMode(callback) {
-    callback(null, this.autoMode);
-  }
-
-  disableTemperatureControl() {
-    this.heaterService
-      .getCharacteristic(Characteristic.TargetTemperature)
-      .setProps({ minValue: NaN, maxValue: NaN }); // Disable range
-    this.log('Target temperature control disabled in AUTO mode.');
-  }
-
-  enableTemperatureControl() {
-    this.heaterService
-      .getCharacteristic(Characteristic.TargetTemperature)
-      .setProps({ minValue: 40, maxValue: 80, minStep: 1 }); // Restore range
-    this.log('Target temperature control enabled.');
   }
 
   async setEcoMode(eco) {
@@ -142,6 +138,24 @@ class AristonWaterHeater {
     } catch (error) {
       this.log('Error setting ECO mode:', error);
     }
+  }
+
+  disableTemperatureControl() {
+    this.heaterService
+      .getCharacteristic(Characteristic.TargetTemperature)
+      .setProps({ minValue: NaN, maxValue: NaN }); // Disable range
+    this.log('Target temperature control disabled in AUTO mode.');
+  }
+
+  enableTemperatureControl() {
+    this.heaterService
+      .getCharacteristic(Characteristic.TargetTemperature)
+      .setProps({ minValue: 40, maxValue: 80, minStep: 1 }); // Restore range
+    this.log('Target temperature control enabled.');
+  }
+
+  getAutoMode(callback) {
+    callback(null, this.autoMode);
   }
 
   async getCurrentTemperature(callback) {
@@ -183,51 +197,6 @@ class AristonWaterHeater {
     }
   }
 
-  async getTargetTemperature(callback) {
-    if (!this.token || !this.powerState) {
-      callback(null, this.targetTemperature);
-      return;
-    }
-
-    try {
-      const response = await this.retryRequest(() => axios.get(`https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantId}`, {
-        headers: {
-          'ar.authToken': this.token,
-        },
-      }));
-
-      let procReqTemp = response.data.procReqTemp;
-      let reqTemp = response.data.reqTemp;
-      this.targetTemperature = procReqTemp || reqTemp || 40;
-
-      this.log('Target temperature:', this.targetTemperature);
-      callback(null, this.targetTemperature);
-    } catch (error) {
-      this.log('Error getting target temperature:', error);
-      callback(null, 40);
-    }
-  }
-
-  async retryRequest(requestFunction, retries = 3, delay = 5000) {
-    for (let attempt = 0; attempt < retries; attempt++) {
-      try {
-        return await requestFunction();
-      } catch (error) {
-        if (error.response && error.response.status === 429) {
-          this.log(`Rate limited, retrying after ${delay}ms...`);
-          await this.sleep(delay);
-        } else {
-          throw error;
-        }
-      }
-    }
-    throw new Error('Max retries reached');
-  }
-
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
   async setTargetTemperature(value, callback) {
     if (!this.token) {
       this.log('No token, cannot set temperature');
@@ -235,7 +204,7 @@ class AristonWaterHeater {
       return;
     }
 
-    value = Math.max(40, Math.min(value, 80)); // Clamp temperature between 40 and 80
+    value = Math.max(40, Math.min(value, 80));
     this.targetTemperature = value;
 
     try {
@@ -259,6 +228,37 @@ class AristonWaterHeater {
       }
     } catch (error) {
       this.log('Error setting temperature:', error);
+      callback(error);
+    }
+  }
+
+  async setHeatingState(value, callback) {
+    if (!this.token) {
+      callback(new Error('No token'));
+      return;
+    }
+
+    const powerState = value === Characteristic.TargetHeatingCoolingState.HEAT;
+    this.powerState = powerState;
+    this.log(powerState ? 'Turning heater ON' : 'Turning heater OFF');
+
+    try {
+      const response = await axios.post(`https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantId}/switch`, powerState, {
+        headers: {
+          'ar.authToken': this.token,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.data.success) {
+        this.log('Heater state updated successfully');
+        callback(null);
+      } else {
+        this.log('Error updating heater state');
+        callback(new Error('Failed to update heater state'));
+      }
+    } catch (error) {
+      this.log('Error updating heater state:', error);
       callback(error);
     }
   }
