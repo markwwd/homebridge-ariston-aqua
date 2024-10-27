@@ -60,36 +60,7 @@ class AristonWaterHeater {
       .setCharacteristic(Characteristic.Model, this.model)
       .setCharacteristic(Characteristic.SerialNumber, this.serialNumber);
 
-      // Set the firmware version characteristic
-    this.informationService
-    .getCharacteristic(Characteristic.FirmwareRevision)
-    .on('get', this.getFirmwareVersion.bind(this));
-
     this.login();
-  }
-
-  async getFirmwareVersion(callback) {
-    if (!this.token) {
-      callback(null, 'Unknown');
-      return;
-    }
-  
-    try {
-      const response = await axios.get(`https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantId}`, {
-        headers: {
-          'ar.authToken': this.token,
-        },
-      });
-  
-      this.log('Full response data:', response.data);  // Log full response to check structure
-      const firmwareVersion = response.data.online_version || 'Unknown';
-      this.log('Firmware version:', firmwareVersion);
-      callback(null, firmwareVersion);
-  
-    } catch (error) {
-      this.log('Error getting firmware version:', error);
-      callback(error, 'Unknown');
-    }
   }
 
   async login() {
