@@ -24,12 +24,13 @@ class AristonWaterHeater {
     this.targetTemperature = 40;
 
     // Data cache time (ms)
-    this.cacheDuration = 30000; // 30 seconds
+    this.cacheDuration = 1000; // 1 second
     this.lastFetchedTime = 0;
     this.cachedTemperature = 40;
 
     this.heaterService = new Service.Thermostat(this.name);
 
+    // Target Temperature characteristic with initial properties
     this.heaterService
       .getCharacteristic(Characteristic.TargetTemperature)
       .setProps({
@@ -48,17 +49,18 @@ class AristonWaterHeater {
       .getCharacteristic(Characteristic.CurrentHeatingCoolingState)
       .on('get', this.getHeatingState.bind(this));
 
+    // Adding AUTO mode as an option
     this.heaterService
       .getCharacteristic(Characteristic.TargetHeatingCoolingState)
       .setProps({
-        validValues: [Characteristic.TargetHeatingCoolingState.OFF, Characteristic.TargetHeatingCoolingState.HEAT, Characteristic.TargetHeatingCoolingState.AUTO]
+        validValues: [
+          Characteristic.TargetHeatingCoolingState.OFF,
+          Characteristic.TargetHeatingCoolingState.HEAT,
+          Characteristic.TargetHeatingCoolingState.AUTO // AUTO mode added
+        ]
       })
-      .on('set', this.setHeatingState.bind(this));
-
-      // Listening for changes in AUTO mode to enable/disable ECO and temperature controls
-    this.heaterService
-    .getCharacteristic(Characteristic.TargetHeatingCoolingState)
-    .on('change', this.handleAutoModeChange.bind(this));
+      .on('set', this.setHeatingState.bind(this))
+      .on('change', this.handleAutoModeChange.bind(this)); // Listens for AUTO mode changes
 
     this.informationService = new Service.AccessoryInformation()
       .setCharacteristic(Characteristic.Manufacturer, 'Ariston')
@@ -93,10 +95,53 @@ class AristonWaterHeater {
     }
   }
 
+  async handleAutoModeChange({ newValue }) {
+    if (newValue === Characteristic.TargetHeatingCoolingState.AUTO) {
+      // Set ECO mode on the heater and disable TargetTemperature adjustments
+      await this.setEcoMode(true);
+      this.disableTemperatureControl();
+    } else {
+      // Re-enable TargetTemperature control if AUTO is disabled
+      await this.setEcoMode(false);
+      this.enableTemperatureControl();
+    }
+  }
+
+  disableTemperatureControl() {
+    this.heaterService
+      .getCharacteristic(Characteristic.TargetTemperature)
+      .setProps({ minValue: NaN, maxValue: NaN }); // Disable range
+    this.log('Target temperature control disabled in AUTO mode.');
+  }
+
+  enableTemperatureControl() {
+    this.heaterService
+      .getCharacteristic(Characteristic.TargetTemperature)
+      .setProps({ minValue: 40, maxValue: 80, minStep: 1 }); // Restore range
+    this.log('Target temperature control enabled.');
+  }
+
+  async setEcoMode(eco) {
+    try {
+      const response = await axios.post(`https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantId}/switchEco`, { eco }, {
+        headers: {
+          'ar.authToken': this.token,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (response.data.success) {
+        this.log(`ECO mode set to ${eco ? 'ON' : 'OFF'}`);
+      } else {
+        this.log('Failed to set ECO mode');
+      }
+    } catch (error) {
+      this.log('Error setting ECO mode:', error);
+    }
+  }
+
   async getCurrentTemperature(callback) {
     const currentTime = Date.now();
     
-    // Kiểm tra cache để tránh gọi API quá nhiều
     if (currentTime - this.lastFetchedTime < this.cacheDuration) {
       this.log('Returning cached temperature:', this.cachedTemperature);
       callback(null, this.cachedTemperature);
@@ -104,7 +149,7 @@ class AristonWaterHeater {
     }
 
     if (!this.token) {
-      callback(null, 40); // Mặc định là 40 nếu không có token
+      callback(null, 40); // Default to 40 if no token
       return;
     }
 
@@ -119,23 +164,23 @@ class AristonWaterHeater {
 
       if (typeof currentTemperature !== 'number' || !isFinite(currentTemperature)) {
         this.log('Current temperature is invalid, defaulting to 40°C');
-        currentTemperature = 40; // Mặc định là 40°C nếu không hợp lệ
+        currentTemperature = 40;
       }
 
       this.cachedTemperature = currentTemperature;
-      this.lastFetchedTime = Date.now(); // Cập nhật thời gian cache
+      this.lastFetchedTime = Date.now();
 
       this.log('Current temperature:', currentTemperature);
       callback(null, currentTemperature);
     } catch (error) {
       this.log('Error getting current temperature:', error);
-      callback(null, 40); // Mặc định là 40°C nếu lỗi
+      callback(null, 40);
     }
   }
 
   async getTargetTemperature(callback) {
     if (!this.token || !this.powerState) {
-      callback(null, this.targetTemperature); // Trả về giá trị đã lưu
+      callback(null, this.targetTemperature);
       return;
     }
 
@@ -148,13 +193,13 @@ class AristonWaterHeater {
 
       let procReqTemp = response.data.procReqTemp;
       let reqTemp = response.data.reqTemp;
-      this.targetTemperature = procReqTemp || reqTemp || 40; // Lấy từ procReqTemp hoặc reqTemp, mặc định là 40
+      this.targetTemperature = procReqTemp || reqTemp || 40;
 
       this.log('Target temperature:', this.targetTemperature);
       callback(null, this.targetTemperature);
     } catch (error) {
       this.log('Error getting target temperature:', error);
-      callback(null, 40); // Mặc định là 40°C nếu lỗi
+      callback(null, 40);
     }
   }
 
@@ -185,14 +230,14 @@ class AristonWaterHeater {
       return;
     }
 
-    value = Math.max(40, Math.min(value, 80)); // Giới hạn nhiệt độ từ 40 đến 80
+    value = Math.max(40, Math.min(value, 80)); // Clamp temperature between 40 and 80
     this.targetTemperature = value;
 
     try {
       const response = await axios.post(`https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantId}/temperature`, {
         eco: false,
         new: value,
-        old: 70,  // Cần lấy giá trị cũ từ hệ thống nếu cần
+        old: 70,
       }, {
         headers: {
           'ar.authToken': this.token,
@@ -220,7 +265,7 @@ class AristonWaterHeater {
     }
 
     const powerState = value === Characteristic.TargetHeatingCoolingState.HEAT;
-    this.powerState = powerState; // Cập nhật trạng thái bật/tắt
+    this.powerState = powerState;
     this.log(powerState ? 'Turning heater ON' : 'Turning heater OFF');
 
     try {
@@ -244,50 +289,6 @@ class AristonWaterHeater {
     }
   }
 
-  async handleAutoModeChange({ newValue }) {
-    if (newValue === Characteristic.TargetHeatingCoolingState.AUTO) {
-      // Set ECO mode on the heater and disable TargetTemperature adjustments
-      await this.setEcoMode(true);
-      this.disableTemperatureControl();
-    } else {
-      // Re-enable TargetTemperature control if AUTO is disabled
-      await this.setEcoMode(false);
-      this.enableTemperatureControl();
-    }
-  }
-  
-  disableTemperatureControl() {
-    this.heaterService
-      .getCharacteristic(Characteristic.TargetTemperature)
-      .setProps({ minValue: NaN, maxValue: NaN }); // Disable range
-    this.log('Target temperature control disabled in AUTO mode.');
-  }
-  
-  enableTemperatureControl() {
-    this.heaterService
-      .getCharacteristic(Characteristic.TargetTemperature)
-      .setProps({ minValue: 40, maxValue: 80, minStep: 1 }); // Restore range
-    this.log('Target temperature control enabled.');
-  }
-  
-  async setEcoMode(eco) {
-    try {
-      const response = await axios.post(`https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantId}/switchEco`, { eco }, {
-        headers: {
-          'ar.authToken': this.token,
-          'Content-Type': 'application/json'
-        }
-      });
-      if (response.data.success) {
-        this.log(`ECO mode set to ${eco ? 'ON' : 'OFF'}`);
-      } else {
-        this.log('Failed to set ECO mode');
-      }
-    } catch (error) {
-      this.log('Error setting ECO mode:', error);
-    }
-  }
-
   getHeatingState(callback) {
     if (this.powerState) {
       callback(null, Characteristic.CurrentHeatingCoolingState.HEAT);
@@ -297,6 +298,6 @@ class AristonWaterHeater {
   }
 
   getServices() {
-    return [this.heaterService, this.informationService]; // Bao gồm cả AccessoryInformation
+    return [this.heaterService, this.informationService];
   }
 }
