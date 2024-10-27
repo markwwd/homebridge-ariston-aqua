@@ -23,8 +23,8 @@ class AristonWaterHeater {
     this.powerState = false;
     this.targetTemperature = 40;
 
-    // Thời gian cache dữ liệu (ms)
-    this.cacheDuration = 60000; // 1 phút
+    // Data cache time (ms)
+    this.cacheDuration = 1000; // 1 second
     this.lastFetchedTime = 0;
     this.cachedTemperature = 40;
 
