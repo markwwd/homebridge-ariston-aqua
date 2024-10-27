@@ -33,8 +33,8 @@ class AristonWaterHeater {
     this.heaterService
       .getCharacteristic(Characteristic.TargetTemperature)
       .setProps({
-        minValue: 30,
-        maxValue: 100,
+        minValue: 40,
+        maxValue: 80,
         minStep: 1
       })
       .on('set', this.setTargetTemperature.bind(this))
@@ -51,7 +51,7 @@ class AristonWaterHeater {
     this.heaterService
       .getCharacteristic(Characteristic.TargetHeatingCoolingState)
       .setProps({
-        validValues: [Characteristic.TargetHeatingCoolingState.OFF, Characteristic.TargetHeatingCoolingState.HEAT]
+        validValues: [Characteristic.TargetHeatingCoolingState.OFF, Characteristic.TargetHeatingCoolingState.HEAT, Characteristic.TargetHeatingCoolingState.AUTO]
       })
       .on('set', this.setHeatingState.bind(this));
 
@@ -238,6 +238,47 @@ class AristonWaterHeater {
       callback(error);
     }
   }
+
+  async setHeatingState(value, callback) {
+    if (!this.token) {
+      callback(new Error('No token'));
+      return;
+    }
+  
+    let powerState;
+    if (value === Characteristic.TargetHeatingCoolingState.AUTO) {
+      // Handle "Auto" mode (set to schedule mode)
+      this.log('Setting heater to Schedule Mode');
+      powerState = 'timer'; // Replace with your API value for schedule mode
+    } else {
+      powerState = value === Characteristic.TargetHeatingCoolingState.HEAT;
+      this.powerState = powerState;
+    }
+  
+    try {
+      const response = await axios.post(
+        `https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantId}/switch`,
+        powerState,
+        {
+          headers: {
+            'ar.authToken': this.token,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+  
+      if (response.data.success) {
+        this.log('Heater state updated successfully');
+        callback(null);
+      } else {
+        this.log('Error updating heater state');
+        callback(new Error('Failed to update heater state'));
+      }
+    } catch (error) {
+      this.log('Error updating heater state:', error);
+      callback(error);
+    }
+  }  
 
   getHeatingState(callback) {
     if (this.powerState) {
