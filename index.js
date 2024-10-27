@@ -51,9 +51,58 @@ class AristonWaterHeater {
     this.heaterService
       .getCharacteristic(Characteristic.TargetHeatingCoolingState)
       .setProps({
-        validValues: [Characteristic.TargetHeatingCoolingState.OFF, Characteristic.TargetHeatingCoolingState.HEAT]
+        validValues: [Characteristic.TargetHeatingCoolingState.OFF, Characteristic.TargetHeatingCoolingState.HEAT, Characteristic.TargetHeatingCoolingState.AUTO]
       })
       .on('set', this.setHeatingState.bind(this));
+
+      // Listening for changes in AUTO mode to enable/disable ECO and temperature controls
+    this.heaterService
+    .getCharacteristic(Characteristic.TargetHeatingCoolingState)
+    .on('change', this.handleAutoModeChange.bind(this));
+}
+
+async handleAutoModeChange({ newValue }) {
+  if (newValue === Characteristic.TargetHeatingCoolingState.AUTO) {
+    // Set ECO mode on the heater and disable TargetTemperature adjustments
+    await this.setEcoMode(true);
+    this.disableTemperatureControl();
+  } else {
+    // Re-enable TargetTemperature control if AUTO is disabled
+    await this.setEcoMode(false);
+    this.enableTemperatureControl();
+  }
+}
+
+disableTemperatureControl() {
+  this.heaterService
+    .getCharacteristic(Characteristic.TargetTemperature)
+    .setProps({ minValue: NaN, maxValue: NaN }); // Disable range
+  this.log('Target temperature control disabled in AUTO mode.');
+}
+
+enableTemperatureControl() {
+  this.heaterService
+    .getCharacteristic(Characteristic.TargetTemperature)
+    .setProps({ minValue: 40, maxValue: 80, minStep: 1 }); // Restore range
+  this.log('Target temperature control enabled.');
+}
+
+async setEcoMode(eco) {
+  try {
+    const response = await axios.post(`https://www.ariston-net.remotethermo.com/api/v2/velis/medPlantData/${this.plantId}/switchEco`, { eco }, {
+      headers: {
+        'ar.authToken': this.token,
+        'Content-Type': 'application/json'
+      }
+    });
+    if (response.data.success) {
+      this.log(`ECO mode set to ${eco ? 'ON' : 'OFF'}`);
+    } else {
+      this.log('Failed to set ECO mode');
+    }
+  } catch (error) {
+    this.log('Error setting ECO mode:', error);
+  }
 
     this.informationService = new Service.AccessoryInformation()
       .setCharacteristic(Characteristic.Manufacturer, 'Ariston')
