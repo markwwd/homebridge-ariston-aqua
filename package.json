@@ -1,7 +1,7 @@
 {
-  "name": "homebridge-aristonnet-aqua",
-  "version": "1.2.4",
-  "description": "A forked plugin for Ariston Water Heater",
+  "name": "homebridge-aristonnet",
+  "version": "1.2.3",
+  "description": "A plugin for control Ariston Water Heater",
   "main": "index.js",
   "engines": {
     "node": ">=0.12.0",
