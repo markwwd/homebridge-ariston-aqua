@@ -1,6 +1,6 @@
 {
   "name": "homebridge-ariston-aqua",
-  "version": "1.2.8",
+  "version": "1.2.9",
   "description": "A plugin for Ariston Water Heater",
   "main": "index.js",
   "engines": {

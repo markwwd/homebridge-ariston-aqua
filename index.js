@@ -24,7 +24,7 @@ class AristonWaterHeater {
     this.targetTemperature = 40;
 
     // Data cache time (ms)
-    this.cacheDuration = 1000; // 1 second
+    this.cacheDuration = 30000; // 30 seconds
     this.lastFetchedTime = 0;
     this.cachedTemperature = 40;
 
